@@ -1,0 +1,81 @@
+apiVersion: sparkoperator.k8s.io/v1beta2
+kind: SparkApplication
+metadata:
+  name: karpovzone-seller-items
+spec:
+  type: Python
+  pythonVersion: "3"
+  mode: cluster
+  image: itayb/spark:3.1.1-hadoop-3.2.0-aws
+  imagePullPolicy: Always
+  mainApplicationFile: "local:///de-project/spark-job-sellers.py"
+  sparkVersion: "3.1.1"
+  timeToLiveSeconds: 300
+  restartPolicy:
+    type: Never
+
+  volumes:
+    - name: git-repo
+      emptyDir:
+        sizeLimit: 500Mi
+    - name: ssh-key
+      secret:
+        secretName: your-git-ssh-secret
+        defaultMode: 256
+
+  driver:
+    tolerations:
+      - key: your-cluster.example.com/workload
+        operator: Equal
+        effect: NoSchedule
+        value: "true"
+      - key: your-cluster.example.com/spark
+        operator: Equal
+        effect: NoSchedule
+        value: "true"
+    volumeMounts:
+      - name: git-repo
+        mountPath: /de-project
+      - name: ssh-key
+        mountPath: /tmp/ssh
+    initContainers:
+      - name: git-clone
+        image: alpine/git:2.40.1
+        env:
+          - name: GIT_SSH_COMMAND
+            value: "ssh -o BatchMode=yes -o StrictHostKeyChecking=yes"
+        command:
+          - sh
+          - -c
+          - >-
+            git clone --depth=1 --single-branch
+            git@github.com:YOUR_GITHUB_USERNAME/YOUR_REPOSITORY.git
+            /de-project
+        volumeMounts:
+          - name: git-repo
+            mountPath: /de-project
+          - name: ssh-key
+            mountPath: /root/.ssh
+    cores: 1
+    coreLimit: "1200m"
+    memory: "1024m"
+    labels:
+      version: "3.1.1"
+    serviceAccount: your-spark-service-account
+
+  executor:
+    tolerations:
+      - key: your-cluster.example.com/workload
+        operator: Equal
+        effect: NoSchedule
+        value: "true"
+      - key: your-cluster.example.com/spark
+        operator: Equal
+        effect: NoSchedule
+        value: "true"
+    cores: 1
+    coreLimit: "2500m"
+    instances: 1
+    memory: "2048m"
+    labels:
+      version: "3.1.1"
